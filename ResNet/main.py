@@ -8,9 +8,9 @@ Created on Mon Oct 30 19:44:02 2017
 import argparse
 import torch
 from flyai.dataset import Dataset
-from model import Model
-from net import Net
-from path import MODEL_PATH
+from CNN.model import Model
+from CNN.net import Net
+from CNN.path import MODEL_PATH
 
 '''
 样例代码仅供参考学习，可以自己修改实现逻辑。
