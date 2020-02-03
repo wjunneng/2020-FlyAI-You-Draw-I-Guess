@@ -15,6 +15,8 @@ input_dir = os.path.join(data_dir, 'input')
 input_draws_dir = os.path.join(input_dir, 'draws')
 # input labels dir
 input_labels_dir = os.path.join(input_dir, 'dev.csv')
+# log dir
+log_dir = os.path.join(input_dir, 'log')
 
 # output dir
 output_dir = os.path.join(data_dir, 'output')
@@ -22,6 +24,8 @@ output_dir = os.path.join(data_dir, 'output')
 output_draws_dir = os.path.join(output_dir, 'draws')
 
 # ############################################# params
+# 模型名称
+model_name = 'resnet'
 # 类别dict
 class_mapping = {0: "airplane",         # 飞机
                  1: "apple",            # 苹果
@@ -63,5 +67,10 @@ class_mapping = {0: "airplane",         # 飞机
                  37: "panda",           # 熊猫
                  38: "piano",           # 钢琴
                  39: "pig"}             # 猪
+# 类别数目
+num_classes = len(class_mapping)
+# 随机种子
+seed = 42
+
 
 print(class_mapping.values())

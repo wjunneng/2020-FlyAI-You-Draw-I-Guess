@@ -7,14 +7,18 @@ os.chdir(sys.path[0])
 import argparse
 import torch
 import logging
-from torch import nn as nn
 import random
+import time
 import numpy as np
+import torch.backends.cudnn as cudnn
+
+from torch import nn as nn
 from time import strftime, localtime
 from importlib import import_module
 from flyai.dataset import Dataset
 
 from ResNet import args
+from ResNet.util.util import Util, AverageMeter
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -43,8 +47,51 @@ class Instructor(object):
 
         return model
 
+    @staticmethod
+    def getOptimizer(model, args):
+        if args.optimizer == 'sgd':
+            torch.optim.SGD(params=model.parameters(), lr=args.lr, momentum=args.momentum, nesterov=args.nesterov,
+                            weight_decay=args.weight_decay)
+        elif args.optimizer == 'rmsprop':
+            torch.optim.RMSprop(params=model.parameters(), lr=args.lr, alpha=args.alpha, weight_decay=args.weight_decay)
+        elif args.optimizer == 'adam':
+            return torch.optim.Adam(params=model.parameters(), lr=args.lr, betas=(args.beta1, args.beta2),
+                                    weight_decay=args.weight_decay)
+        else:
+            raise NotImplementedError
+
     def run(self):
-        pass
+        best_err1 = 100.
+        best_epoch = 0
+
+        self.args.tensorboard = False
+        logger.info('==> creating model "{}"'.format(args.model_name))
+        model = Instructor.getModel(**vars(args))
+
+        # 大部分情况下，设置这个flag可以让内置的cuDNN的auto - tuner自动寻找最适合当前配置的高效算法，来达到优化运行效率的问题。
+        cudnn.benchmark = True
+        # define loss function (criterion) and pptimizer
+        criterion = nn.CrossEntropyLoss().to(DEVICE)
+
+        # define optimizer
+        optimizer = Instructor.getOptimizer(model=model, args=args)
+
+        for epoch in range(0, self.args.EPOCHS):
+            batch_time = AverageMeter()
+            data_time = AverageMeter()
+            losses = AverageMeter()
+            top1 = AverageMeter()
+            top5 = AverageMeter()
+
+            # switch to train mode
+            model.train()
+
+            lr = Util.adjust_learning_rate(optimizer=optimizer, lr_init=self.args.lr,
+                                           decay_rate=self.args.decay_rate, epoch=epoch, num_epochs=self.args.EPOCHS)
+            logger.info('Epoch {:3d} lr = {:.6d}', (epoch, lr))
+
+            end = time.time()
+            for i, (inputs, targets) in enumerate
 
 
 if __name__ == '__main__':

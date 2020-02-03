@@ -4,6 +4,7 @@ import sys
 
 os.chdir(sys.path[0])
 import json
+import copy
 import pandas as pd
 from matplotlib import pyplot as plt
 
@@ -39,6 +40,48 @@ class Util(object):
                 plt.show()
 
         return True
+
+    @staticmethod
+    def adjust_learning_rate(optimizer, lr_init, decay_rate, epoch, num_epochs):
+        """
+        Decay Learning rate at 1/2 and 3/4 of the num_epochs
+        :param optimizer:
+        :param lr_init:
+        :param decay_rate:
+        :param epoch:
+        :param num_epoch:
+        :return:
+        """
+        lr = copy.deepcopy(lr_init)
+        if epoch >= num_epochs * 0.75:
+            lr *= decay_rate ** 2
+        elif epoch >= num_epochs * 0.5:
+            lr *= decay_rate
+        for param_group in optimizer.param_groups:
+            param_group['lr'] = lr
+
+        return lr
+
+
+class AverageMeter(object):
+    """
+    Computes and stores the averagte and current value
+    """
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
 
 
 if __name__ == '__main__':
