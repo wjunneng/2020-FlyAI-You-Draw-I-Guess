@@ -11,13 +11,15 @@ current_dir = os.path.abspath('..')
 data_dir = os.path.join(current_dir, 'data')
 # input dir
 input_dir = os.path.join(data_dir, 'input')
-# draws dir
-draws_dir = os.path.join(input_dir, 'draws')
-# labels dir
-labels_dir = os.path.join(input_dir, 'dev.csv')
+# input draws dir
+input_draws_dir = os.path.join(input_dir, 'draws')
+# input labels dir
+input_labels_dir = os.path.join(input_dir, 'dev.csv')
 
 # output dir
 output_dir = os.path.join(data_dir, 'output')
+# output draws dir
+output_draws_dir = os.path.join(output_dir, 'draws')
 
 # ############################################# params
 # 类别dict
