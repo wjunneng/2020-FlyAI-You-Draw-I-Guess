@@ -5,41 +5,48 @@ import sys
 os.chdir(sys.path[0])
 import json
 import copy
-import pandas as pd
+import torch
+import numpy as np
 from matplotlib import pyplot as plt
+from matplotlib import image as mimage
+from torch.utils.data import Dataset
+
+from ResNet import args
 
 
 class Util(object):
 
     @staticmethod
-    def draw_image(image_dirs, output_draws_dir, input_labels_dir):
+    def draw_image(list_dirs=None, targets=None, image_dirs=args.input_dir, output_draws_dir=args.output_draws_dir):
         """
         绘制图片
         :param image_dir:
         :return:
         """
-        # json_path, label
-        path_label = pd.read_csv(filepath_or_buffer=input_labels_dir, encoding='utf-8')
-
-        path_label = dict(zip([os.path.basename(i) for i in path_label['json_path']], path_label['label']))
-
         if os.path.exists(output_draws_dir) is False:
             os.makedirs(output_draws_dir)
 
-        for index, image_dir in enumerate(os.listdir(image_dirs)):
+        data = []
+        if list_dirs is None:
+            list_dirs = os.listdir(image_dirs)
+            image_dirs = args.input_draws_dir
+
+        for image_dir in list_dirs:
             with open(file=os.path.join(image_dirs, image_dir), mode='r', encoding='utf-8') as file:
                 json_data = json.load(file)
 
                 drawing_data = json_data['drawing']
-                for index, item in enumerate(drawing_data):
+                for item in drawing_data:
                     plt.plot(item[0], [0 - i + 256 for i in item[1]])
 
                 plt.axis('off')
-                # plt.title(image_dir)
-                plt.savefig(os.path.join(output_draws_dir, str(image_dir.split('.')[0]) + '.jpg'))
-                plt.show()
+                save_path = os.path.join(output_draws_dir, str(str(image_dir.split('/')[-1]).split('.')[0]) + '.jpg')
+                plt.savefig(save_path)
+                data.append(mimage.imread(save_path))
 
-        return True
+        data = np.asarray(data)
+
+        return data, targets
 
     @staticmethod
     def adjust_learning_rate(optimizer, lr_init, decay_rate, epoch, num_epochs):
@@ -62,6 +69,30 @@ class Util(object):
 
         return lr
 
+    @staticmethod
+    def error(output, target, topk=(1,)):
+        """
+        Computes the error@k for the specified values of k
+        :param output:
+        :param target:
+        :param topk:
+        :return:
+        """
+        with torch.no_grad():
+            maxk = max(topk)
+            batch_size = target.size(0)
+
+            _, pred = output.topk(maxk, 1, True, True)
+            pred = pred.t()
+            correct = pred.eq(target.view(1, -1).expand_as(pred))
+
+            res = []
+            for k in topk:
+                correct_k = correct[:k].view(-1).float().sum(0)
+                res.append(100.0 - correct_k.mul_(100.0 / batch_size))
+
+        return res
+
 
 class AverageMeter(object):
     """
@@ -83,9 +114,7 @@ class AverageMeter(object):
         self.count += n
         self.avg = self.sum / self.count
 
-
-if __name__ == '__main__':
-    from ResNet import args
-
-    Util.draw_image(image_dirs=args.input_draws_dir, output_draws_dir=args.output_draws_dir,
-                    input_labels_dir=args.input_labels_dir)
+# if __name__ == '__main__':
+#     from ResNet import args
+#
+#     Util.draw_image(image_dirs=args.input_draws_dir, output_draws_dir=args.output_draws_dir)

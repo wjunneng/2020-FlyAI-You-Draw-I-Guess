@@ -35,11 +35,13 @@ class Instructor(object):
     def __init__(self, args):
         self.args = args
 
+        self.dataset = Dataset(epochs=args.EPOCHS, batch=args.BATCH, val_batch=args.BATCH)
+
     @staticmethod
-    def getModel(arch, **kwargs):
-        m = import_module('models.' + arch)
+    def getModel(model_name, **kwargs):
+        m = import_module('models.' + model_name)
         model = m.createModel(**kwargs)
-        if arch.startswith('alexnet') or arch.startswith('vgg'):
+        if model_name.startswith('alexnet') or model_name.startswith('vgg'):
             model.featrue = nn.DataParallel(module=model.feature)
             model = model.to(DEVICE)
         else:
@@ -50,10 +52,11 @@ class Instructor(object):
     @staticmethod
     def getOptimizer(model, args):
         if args.optimizer == 'sgd':
-            torch.optim.SGD(params=model.parameters(), lr=args.lr, momentum=args.momentum, nesterov=args.nesterov,
-                            weight_decay=args.weight_decay)
+            return torch.optim.SGD(params=model.parameters(), lr=args.lr, momentum=args.momentum,
+                                   nesterov=args.nesterov, weight_decay=args.weight_decay)
         elif args.optimizer == 'rmsprop':
-            torch.optim.RMSprop(params=model.parameters(), lr=args.lr, alpha=args.alpha, weight_decay=args.weight_decay)
+            return torch.optim.RMSprop(params=model.parameters(), lr=args.lr, alpha=args.alpha,
+                                       weight_decay=args.weight_decay)
         elif args.optimizer == 'adam':
             return torch.optim.Adam(params=model.parameters(), lr=args.lr, betas=(args.beta1, args.beta2),
                                     weight_decay=args.weight_decay)
@@ -74,7 +77,7 @@ class Instructor(object):
         criterion = nn.CrossEntropyLoss().to(DEVICE)
 
         # define optimizer
-        optimizer = Instructor.getOptimizer(model=model, args=args)
+        optimizer = Instructor.getOptimizer(model=model, args=self.args)
 
         for epoch in range(0, self.args.EPOCHS):
             batch_time = AverageMeter()
@@ -88,10 +91,76 @@ class Instructor(object):
 
             lr = Util.adjust_learning_rate(optimizer=optimizer, lr_init=self.args.lr,
                                            decay_rate=self.args.decay_rate, epoch=epoch, num_epochs=self.args.EPOCHS)
-            logger.info('Epoch {:3d} lr = {:.6d}', (epoch, lr))
+
+            logger.info('Epoch: {0}  lr: {1}'.format(epoch, lr))
 
             end = time.time()
-            for i, (inputs, targets) in enumerate
+            for step in range(0, self.dataset.get_step() // self.args.EPOCHS):
+                x_train, y_train = self.dataset.next_train_batch()
+                x_val, y_val = self.dataset.next_validation_batch()
+
+                train_loader = torch.utils.data.DataLoader(dataset=Util.draw_image(list_dirs=x_train, targets=y_train),
+                                                           batch_size=self.args.BATCH,
+                                                           shuffle=True,
+                                                           num_workers=self.args.num_workers,
+                                                           pin_memory=True)
+                val_loader = torch.utils.data.DataLoader(dataset=Util.draw_image(list_dirs=x_val, targets=y_val),
+                                                         batch_size=self.args.BATCH,
+                                                         shuffle=True,
+                                                         num_workers=self.args.num_workers,
+                                                         pin_memory=True)
+                # inputs_shape: (4, 480, 640, 3)
+                inputs, targets = train_loader.dataset
+                # inputs_shape: (4, 3, 480, 640)
+                inputs = inputs.transpose((0, 3, 1, 2))
+                inputs = torch.from_numpy(inputs)
+                targets = torch.from_numpy(targets)
+
+                # measure data loading time
+                data_time.update(time.time() - end)
+
+                inputs = inputs.to(DEVICE)
+                targets = targets.to(DEVICE)
+
+                # compute outputs
+                outputs = model(inputs)
+                loss = criterion(outputs, targets)
+
+                # measure error and record loss
+                err1, err5 = Util.error(outputs.data, targets, topk=(1, 5))
+                losses.update(loss.item(), inputs.size(0))
+                top1.update(err1.item(), inputs.size(0))
+                top5.update(err5.item(), inputs.size(0))
+
+                # compute gradient and do SGD step
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                # measure elapsed time
+                batch_time.update(time.time() - end)
+                end = time.time()
+
+                if self.args.print_freq > 0 and \
+                        (i + 1) % self.args.print_freq == 0:
+                    print('Epoch: [{0}][{1}/{2}]\t'
+                          'Time {batch_time.avg:.3f}\t'
+                          'Data {data_time.avg:.3f}\t'
+                          'Loss {loss.val:.4f}\t'
+                          'Err@1 {top1.val:.4f}\t'
+                          'Err@5 {top5.val:.4f}'.format(
+                        epoch, i + 1, len(train_loader),
+                        batch_time=batch_time, data_time=data_time,
+                        loss=losses, top1=top1, top5=top5))
+
+            print('Epoch: {:3d} Train loss {loss.avg:.4f} '
+                  'Err@1 {top1.avg:.4f}'
+                  ' Err@5 {top5.avg:.4f}'
+                  .format(epoch, loss=losses, top1=top1, top5=top5))
+
+            return losses.avg, top1.avg, top5.avg, lr
+
+        return True
 
 
 if __name__ == '__main__':

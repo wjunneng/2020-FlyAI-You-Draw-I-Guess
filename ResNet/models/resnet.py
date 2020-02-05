@@ -42,28 +42,6 @@ class BasicBlockWithDeathRate(nn.Module):
         return x
 
 
-# class DropLayer(nn.Module):
-#     """Drop the layer with probability p.
-#     It can be used for stochasitc depth"""
-
-#     def __init__(self, layer, death_rate=0.5):
-#         super(DropLayer, self).__init__()
-#         self.layer = layer
-#         self.death_rate = death_rate
-
-#     def forward(self, x):
-#         print(self.layer)
-#         if not self.training or torch.rand(1)[0] >= self.death_rate:
-#             print('pass')
-#             return self.layer(x)
-#         else:
-#             print('stop')
-#             return x.div_(1 - self.death_rate)
-
-#     def __str__(self):
-#         return 'DropLayer(death_rate={})'.format(self.death_rate)
-
-
 class DownsampleB(nn.Module):
 
     def __init__(self, nIn, nOut, stride):
@@ -82,24 +60,21 @@ class ResNetCifar(nn.Module):
                  the last block
     """
 
-    def __init__(self, depth, death_rates=None, block=BasicBlockWithDeathRate,
-                 num_classes=10):
+    def __init__(self, depth, death_rates=None, block=BasicBlockWithDeathRate, num_classes=10):
         assert (depth - 2) % 6 == 0, 'depth should be one of 6N+2'
         super(ResNetCifar, self).__init__()
         n = (depth - 2) // 6
         assert death_rates is None or len(death_rates) == 3 * n
         if death_rates is None:
             death_rates = [0.] * (3 * n)
+
         self.inplanes = 16
-        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1,
-                               bias=False)
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(16)
         self.relu = nn.ReLU(inplace=True)
         self.layer1 = self._make_layer(block, 16, death_rates[:n])
-        self.layer2 = self._make_layer(block, 32, death_rates[n:2 * n],
-                                       stride=2)
-        self.layer3 = self._make_layer(block, 64, death_rates[2 * n:],
-                                       stride=2)
+        self.layer2 = self._make_layer(block, 32, death_rates[n:2 * n], stride=2)
+        self.layer3 = self._make_layer(block, 64, death_rates[2 * n:], stride=2)
         self.avgpool = nn.AvgPool2d(8)
         self.fc = nn.Linear(64 * block.expansion, num_classes)
 
@@ -114,16 +89,14 @@ class ResNetCifar(nn.Module):
     def _make_layer(self, block, planes, death_rates, stride=1):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
-            downsample = DownsampleB(self.inplanes, planes * block.expansion,
-                                     stride)
+            downsample = DownsampleB(self.inplanes, planes * block.expansion, stride)
             # downsample = nn.Sequential(
             #     nn.Conv2d(self.inplanes, planes * block.expansion,
             #               kernel_size=1, stride=stride, bias=False),
             #     nn.BatchNorm2d(planes * block.expansion),
             # )
 
-        layers = [block(self.inplanes, planes, stride, downsample=downsample,
-                        death_rate=death_rates[0])]
+        layers = [block(self.inplanes, planes, stride, downsample=downsample, death_rate=death_rates[0])]
         self.inplanes = planes * block.expansion
         for death_rate in death_rates[1:]:
             layers.append(block(self.inplanes, planes, death_rate=death_rate))
@@ -146,17 +119,37 @@ class ResNetCifar(nn.Module):
         return x
 
 
-def createModel(depth, data, num_classes, death_mode='none', death_rate=0.5,
-                **kwargs):
+def createModel(depth, num_classes, death_mode='none', death_rate=0.5, **kwargs):
     assert (depth - 2) % 6 == 0, 'depth should be one of 6N+2'
-    print('Create ResNet-{:d} for {}'.format(depth, data))
+    print('Create ResNet-{:d} for image'.format(depth))
     nblocks = (depth - 2) // 2
+
     if death_mode == 'uniform':
         death_rates = [death_rate] * nblocks
     elif death_mode == 'linear':
-        death_rates = [float(i + 1) * death_rate / float(nblocks)
-                       for i in range(nblocks)]
+        death_rates = [float(i + 1) * death_rate / float(nblocks) for i in range(nblocks)]
     else:
         death_rates = None
-    return ResNetCifar(depth, death_rates, BasicBlockWithDeathRate,
-                       num_classes)
+
+    return ResNetCifar(depth, death_rates, BasicBlockWithDeathRate, num_classes)
+
+# class DropLayer(nn.Module):
+#     """Drop the layer with probability p.
+#     It can be used for stochasitc depth"""
+
+#     def __init__(self, layer, death_rate=0.5):
+#         super(DropLayer, self).__init__()
+#         self.layer = layer
+#         self.death_rate = death_rate
+
+#     def forward(self, x):
+#         print(self.layer)
+#         if not self.training or torch.rand(1)[0] >= self.death_rate:
+#             print('pass')
+#             return self.layer(x)
+#         else:
+#             print('stop')
+#             return x.div_(1 - self.death_rate)
+
+#     def __str__(self):
+#         return 'DropLayer(death_rate={})'.format(self.death_rate)
