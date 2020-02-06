@@ -43,7 +43,7 @@ class Instructor(object):
 
         self.args.tensorboard = False
         logger.info('==> creating model "{}"'.format(args.model_name))
-        model = Instructor.getModel(**vars(args))
+        model = Util.getModel(**vars(args))
 
         # 大部分情况下，设置这个flag可以让内置的cuDNN的auto - tuner自动寻找最适合当前配置的高效算法，来达到优化运行效率的问题。
         cudnn.benchmark = True
@@ -51,13 +51,13 @@ class Instructor(object):
         criterion = nn.CrossEntropyLoss().to(DEVICE)
 
         # define optimizer
-        optimizer = Instructor.getOptimizer(model=model, args=self.args)
+        optimizer = Util.getOptimizer(model=model, args=self.args)
 
         trainer = Trainer(dataset=self.dataset, model=model, criterion=criterion, optimizer=optimizer, args=self.args,
                           logger=logger)
         for epoch in range(0, self.args.EPOCHS):
             # train for one epoch
-            train_loss, train_err1, train_err5, lr = trainer.train(epoch=epoch)
+            trainer.train(epoch=epoch)
 
             # evaluate on validation set
             val_loss, val_err1, val_err5 = trainer.test(epoch=epoch)
@@ -78,7 +78,7 @@ class Instructor(object):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='CV')
     parser.add_argument('-e', '--EPOCHS', default=2, type=int, help='train epochs')
-    parser.add_argument('-b', '--BATCH', default=4, type=int, help='batch size')
+    parser.add_argument('-b', '--BATCH', default=2, type=int, help='batch size')
     config = parser.parse_args()
 
     args.EPOCHS = config.EPOCHS

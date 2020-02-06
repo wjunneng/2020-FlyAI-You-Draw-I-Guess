@@ -1,58 +1,49 @@
 # -*- coding: utf-8 -*
-import numpy
 import os
 import torch
+import torch.utils.data
 from flyai.model.base import Base
 
-from ResNet.path import MODEL_PATH
+from ResNet import args
+from ResNet.util.util import Util
 
-__import__('net', fromlist=["Net"])
+DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 
 class Model(Base):
     def __init__(self, data):
         self.data = data
-        self.net_path = os.path.join(MODEL_PATH, TORCH_MODEL_NAME)
-        if os.path.exists(self.net_path):
-            self.net = torch.load(self.net_path)
+        self.args = args
+        self.model = Util.getModel(**vars(self.args))
+        self.model.load_state_dict(torch.load(os.path.join(self.args.output_models_dir, 'checkpoint.pkl')))
 
     def predict(self, **data):
-        if self.net is None:
-            self.net = torch.load(self.net_path)
+        self.model.eval()
         x_data = self.data.predict_data(**data)
-        x_data = torch.from_numpy(x_data)
-        outputs = self.net(x_data)
-        prediction = outputs.data.numpy()
-        prediction = self.data.to_categorys(prediction)
-        return prediction
+
+        predict_loader = torch.utils.data.DataLoader(dataset=Util.draw_image(list_dirs=x_data, targets=None),
+                                                     batch_size=1,
+                                                     num_workers=self.args.num_workers,
+                                                     pin_memory=True)
+
+        # inputs_shape: (4, 480, 640, 3)
+        inputs, _ = predict_loader.dataset
+        # inputs_shape: (4, 3, 480, 640)
+        inputs = inputs.transpose((0, 3, 1, 2))
+        inputs = torch.from_numpy(inputs)
+
+        inputs = inputs.to(DEVICE).float()
+
+        # compute outputs
+        outputs = self.model(inputs)
+
+        return torch.argmax(outputs)
 
     def predict_all(self, datas):
-        if self.net is None:
-            self.net = torch.load(self.net_path)
         labels = []
         for data in datas:
-            x_data = self.data.predict_data(**data)
-            x_data = torch.from_numpy(x_data)
-            outputs = self.net(x_data)
-            prediction = outputs.data.numpy()
-            prediction = self.data.to_categorys(prediction)
-            labels.append(prediction)
+            predicts = self.predict(json_path=data['json_path'])
+
+            labels.append(predicts)
+
         return labels
-
-    def batch_iter(self, x, y, batch_size=128):
-        """生成批次数据"""
-        data_len = len(x)
-        num_batch = int((data_len - 1) / batch_size) + 1
-
-        indices = numpy.random.permutation(numpy.arange(data_len))
-        x_shuffle = x[indices]
-        y_shuffle = y[indices]
-
-        for i in range(num_batch):
-            start_id = i * batch_size
-            end_id = min((i + 1) * batch_size, data_len)
-            yield x_shuffle[start_id:end_id], y_shuffle[start_id:end_id]
-
-    def save_model(self, network, path, name=TORCH_MODEL_NAME, overwrite=False):
-        super().save_model(network, path, name, overwrite)
-        torch.save(network, os.path.join(path, name))

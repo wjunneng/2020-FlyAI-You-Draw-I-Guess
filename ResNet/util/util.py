@@ -5,14 +5,16 @@ import sys
 os.chdir(sys.path[0])
 import json
 import copy
-import torch
-import numpy as np
-from matplotlib import pyplot as plt
-from PIL import Image
-import shutil
 import time
-from importlib import import_module
+import torch
+import shutil
+import numpy as np
+import torch.utils.data
+
 from torch import nn
+from PIL import Image
+from importlib import import_module
+from matplotlib import pyplot as plt
 
 from ResNet import args
 
@@ -43,15 +45,14 @@ class Util(object):
 
                 drawing_data = json_data['drawing']
                 for item in drawing_data:
-                    plt.plot(item[0], [0 - i + 256 for i in item[1]])
+                    plt.plot(item[0], [0 - i + 256 for i in item[1]], marker='o', linestyle='solid')
 
                 plt.axis('off')
                 save_path = os.path.join(output_draws_dir, str(str(image_dir.split('/')[-1]).split('.')[0]) + '.jpg')
                 plt.savefig(save_path, bbox_inches='tight')
                 image = Image.open(save_path).resize((args.dpi, args.dpi), Image.ANTIALIAS)
-                # image.save(save_path)
                 data.append(np.asarray(image))
-            plt.close()
+            plt.show()
 
         data = np.asarray(data)
 

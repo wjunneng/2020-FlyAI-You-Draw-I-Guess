@@ -79,7 +79,7 @@ num_workers = 0
 # 频率
 print_freq = 1
 # 分辨率
-dpi = 64
+dpi = 128
 
 # ############################################# model params
 # depth (default=56)
@@ -111,7 +111,7 @@ batch_size = 64
 # choices=['sgd', 'rmsprop', 'adam'] optimizer (default=sgd)
 optimizer = 'sgd'
 # initial learning rate (default: 0.1)
-lr = 0.1
+lr = 0.02
 # decay rate of learning rate (default: 0.1)
 decay_rate = 0.1
 # momentum (default=0.9)
