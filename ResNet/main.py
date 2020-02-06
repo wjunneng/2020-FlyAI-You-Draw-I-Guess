@@ -12,7 +12,7 @@ import time
 import numpy as np
 import torch.backends.cudnn as cudnn
 
-from torch import nn as nn
+from torch import nn
 from time import strftime, localtime
 from importlib import import_module
 from flyai.dataset import Dataset
@@ -25,6 +25,8 @@ logger.setLevel(logging.INFO)
 logger.addHandler(logging.StreamHandler(sys.stdout))
 
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
+print(DEVICE)
 
 
 class Instructor(object):
@@ -119,8 +121,8 @@ class Instructor(object):
                 # measure data loading time
                 data_time.update(time.time() - end)
 
-                inputs = inputs.to(DEVICE)
-                targets = targets.to(DEVICE)
+                inputs = inputs.to(DEVICE).float()
+                targets = targets.to(DEVICE).long()
 
                 # compute outputs
                 outputs = model(inputs)
@@ -139,24 +141,22 @@ class Instructor(object):
 
                 # measure elapsed time
                 batch_time.update(time.time() - end)
+
                 end = time.time()
 
-                if self.args.print_freq > 0 and \
-                        (i + 1) % self.args.print_freq == 0:
+                if self.args.print_freq > 0 and (step + 1) % self.args.print_freq == 0:
                     print('Epoch: [{0}][{1}/{2}]\t'
                           'Time {batch_time.avg:.3f}\t'
                           'Data {data_time.avg:.3f}\t'
                           'Loss {loss.val:.4f}\t'
                           'Err@1 {top1.val:.4f}\t'
-                          'Err@5 {top5.val:.4f}'.format(
-                        epoch, i + 1, len(train_loader),
-                        batch_time=batch_time, data_time=data_time,
-                        loss=losses, top1=top1, top5=top5))
+                          'Err@5 {top5.val:.4f}'.format(epoch, step + 1, len(train_loader), batch_time=batch_time,
+                                                        data_time=data_time, loss=losses, top1=top1, top5=top5))
 
-            print('Epoch: {:3d} Train loss {loss.avg:.4f} '
-                  'Err@1 {top1.avg:.4f}'
-                  ' Err@5 {top5.avg:.4f}'
-                  .format(epoch, loss=losses, top1=top1, top5=top5))
+            print('Epoch: {:3d} Train loss {loss.avg:.4f} Err@1 {top1.avg:.4f} Err@5 {top5.avg:.4f}'.format(epoch,
+                                                                                                            loss=losses,
+                                                                                                            top1=top1,
+                                                                                                            top5=top5))
 
             return losses.avg, top1.avg, top5.avg, lr
 

@@ -74,6 +74,10 @@ num_classes = len(class_mapping)
 seed = 42
 # 工作节点
 num_workers = 0
+# 频率
+print_freq = 1
+# 分辨率
+dpi = 64
 
 # ############################################# model params
 # depth (default=56)

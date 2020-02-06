@@ -8,7 +8,7 @@ import copy
 import torch
 import numpy as np
 from matplotlib import pyplot as plt
-from matplotlib import image as mimage
+from PIL import Image
 from torch.utils.data import Dataset
 
 from ResNet import args
@@ -32,6 +32,7 @@ class Util(object):
             image_dirs = args.input_draws_dir
 
         for image_dir in list_dirs:
+            plt.figure()
             with open(file=os.path.join(image_dirs, image_dir), mode='r', encoding='utf-8') as file:
                 json_data = json.load(file)
 
@@ -41,8 +42,11 @@ class Util(object):
 
                 plt.axis('off')
                 save_path = os.path.join(output_draws_dir, str(str(image_dir.split('/')[-1]).split('.')[0]) + '.jpg')
-                plt.savefig(save_path)
-                data.append(mimage.imread(save_path))
+                plt.savefig(save_path, bbox_inches='tight')
+                image = Image.open(save_path).resize((args.dpi, args.dpi), Image.ANTIALIAS)
+                image.save(save_path)
+                data.append(np.asarray(image))
+            plt.show()
 
         data = np.asarray(data)
 
@@ -114,7 +118,3 @@ class AverageMeter(object):
         self.count += n
         self.avg = self.sum / self.count
 
-# if __name__ == '__main__':
-#     from ResNet import args
-#
-#     Util.draw_image(image_dirs=args.input_draws_dir, output_draws_dir=args.output_draws_dir)

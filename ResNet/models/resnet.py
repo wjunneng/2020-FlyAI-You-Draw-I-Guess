@@ -6,12 +6,13 @@ import torch
 from torch import nn
 from torchvision.models.resnet import conv3x3
 
+from ResNet.args import dpi
+
 
 class BasicBlockWithDeathRate(nn.Module):
     expansion = 1
 
-    def __init__(self, inplanes, planes, stride=1, death_rate=0.,
-                 downsample=None):
+    def __init__(self, inplanes, planes, stride=1, death_rate=0., downsample=None):
         super(BasicBlockWithDeathRate, self).__init__()
         self.conv1 = conv3x3(inplanes, planes, stride)
         self.bn1 = nn.BatchNorm2d(planes)
@@ -27,6 +28,7 @@ class BasicBlockWithDeathRate(nn.Module):
         residual = x
         if self.downsample is not None:
             x = self.downsample(x)
+
         # TODO: fix the bug of original Stochatic depth
         if not self.training or torch.rand(1)[0] >= self.death_rate:
             residual = self.conv1(residual)
@@ -43,7 +45,6 @@ class BasicBlockWithDeathRate(nn.Module):
 
 
 class DownsampleB(nn.Module):
-
     def __init__(self, nIn, nOut, stride):
         super(DownsampleB, self).__init__()
         self.avg = nn.AvgPool2d(stride)
@@ -51,6 +52,7 @@ class DownsampleB(nn.Module):
 
     def forward(self, x):
         x = self.avg(x)
+
         return torch.cat([x] + [x.mul(0)] * (self.expand_ratio - 1), 1)
 
 
@@ -67,7 +69,6 @@ class ResNetCifar(nn.Module):
         assert death_rates is None or len(death_rates) == 3 * n
         if death_rates is None:
             death_rates = [0.] * (3 * n)
-
         self.inplanes = 16
         self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(16)
@@ -75,7 +76,7 @@ class ResNetCifar(nn.Module):
         self.layer1 = self._make_layer(block, 16, death_rates[:n])
         self.layer2 = self._make_layer(block, 32, death_rates[n:2 * n], stride=2)
         self.layer3 = self._make_layer(block, 64, death_rates[2 * n:], stride=2)
-        self.avgpool = nn.AvgPool2d(8)
+        self.avgpool = nn.AvgPool2d(dpi // 4)
         self.fc = nn.Linear(64 * block.expansion, num_classes)
 
         for m in self.modules():
@@ -111,7 +112,6 @@ class ResNetCifar(nn.Module):
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
-
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
         x = self.fc(x)
@@ -121,9 +121,8 @@ class ResNetCifar(nn.Module):
 
 def createModel(depth, num_classes, death_mode='none', death_rate=0.5, **kwargs):
     assert (depth - 2) % 6 == 0, 'depth should be one of 6N+2'
-    print('Create ResNet-{:d} for image'.format(depth))
+    print('Create ResNet-{:d} for images'.format(depth))
     nblocks = (depth - 2) // 2
-
     if death_mode == 'uniform':
         death_rates = [death_rate] * nblocks
     elif death_mode == 'linear':
@@ -132,24 +131,3 @@ def createModel(depth, num_classes, death_mode='none', death_rate=0.5, **kwargs)
         death_rates = None
 
     return ResNetCifar(depth, death_rates, BasicBlockWithDeathRate, num_classes)
-
-# class DropLayer(nn.Module):
-#     """Drop the layer with probability p.
-#     It can be used for stochasitc depth"""
-
-#     def __init__(self, layer, death_rate=0.5):
-#         super(DropLayer, self).__init__()
-#         self.layer = layer
-#         self.death_rate = death_rate
-
-#     def forward(self, x):
-#         print(self.layer)
-#         if not self.training or torch.rand(1)[0] >= self.death_rate:
-#             print('pass')
-#             return self.layer(x)
-#         else:
-#             print('stop')
-#             return x.div_(1 - self.death_rate)
-
-#     def __str__(self):
-#         return 'DropLayer(death_rate={})'.format(self.death_rate)
