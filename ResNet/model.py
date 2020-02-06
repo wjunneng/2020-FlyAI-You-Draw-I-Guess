@@ -4,11 +4,9 @@ import os
 import torch
 from flyai.model.base import Base
 
-from CNN.path import MODEL_PATH
+from ResNet.path import MODEL_PATH
 
 __import__('net', fromlist=["Net"])
-
-TORCH_MODEL_NAME = "model.pkl"
 
 
 class Model(Base):

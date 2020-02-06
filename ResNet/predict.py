@@ -1,5 +1,8 @@
+# -*- coding:utf-8 -*-
+
 from flyai.dataset import Dataset
-from CNN.model import Model
+
+from ResNet.model import Model
 
 data = Dataset()
 model = Model(data)

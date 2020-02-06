@@ -3,6 +3,7 @@
 import numpy
 from flyai.processor.base import Base
 
+
 class Processor(Base):
     def input_x(self, json_path):
         """
