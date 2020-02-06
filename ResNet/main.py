@@ -15,8 +15,8 @@ from torch import nn
 from time import strftime, localtime
 from flyai.dataset import Dataset
 
-from ResNet import args
-from ResNet.util.util import Util, Trainer
+import args
+from util import Util, Trainer
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)

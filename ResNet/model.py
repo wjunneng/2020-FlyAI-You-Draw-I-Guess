@@ -4,8 +4,8 @@ import torch
 import torch.utils.data
 from flyai.model.base import Base
 
-from ResNet import args
-from ResNet.util.util import Util
+import args
+from util import Util
 
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -37,7 +37,7 @@ class Model(Base):
         # compute outputs
         outputs = self.model(inputs)
 
-        return torch.argmax(outputs)
+        return torch.argmax(outputs).tolist()
 
     def predict_all(self, datas):
         labels = []

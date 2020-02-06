@@ -2,7 +2,7 @@
 
 from flyai.dataset import Dataset
 
-from ResNet.model import Model
+from model import Model
 
 data = Dataset()
 model = Model(data)

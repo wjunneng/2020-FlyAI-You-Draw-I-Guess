@@ -6,7 +6,7 @@ import torch
 from torch import nn
 from torchvision.models.resnet import conv3x3
 
-from ResNet.args import dpi
+from args import dpi
 
 
 class BasicBlockWithDeathRate(nn.Module):

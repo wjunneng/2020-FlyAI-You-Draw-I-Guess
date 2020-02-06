@@ -16,7 +16,7 @@ from PIL import Image
 from importlib import import_module
 from matplotlib import pyplot as plt
 
-from ResNet import args
+import args
 
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
