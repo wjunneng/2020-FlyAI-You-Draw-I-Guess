@@ -23,6 +23,8 @@ log_dir = os.path.join(input_dir, 'log')
 output_dir = os.path.join(data_dir, 'output')
 # output draws dir
 output_draws_dir = os.path.join(output_dir, 'draws')
+# output model dir
+output_models_dir = os.path.join(output_dir, 'models')
 
 # ############################################# params
 # 模型名称
