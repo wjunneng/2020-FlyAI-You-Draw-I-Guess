@@ -79,7 +79,7 @@ num_workers = 0
 # 频率
 print_freq = 1
 # 分辨率
-dpi = 128
+dpi = 64
 
 # ############################################# model params
 # depth (default=56)

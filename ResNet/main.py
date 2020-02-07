@@ -78,7 +78,7 @@ class Instructor(object):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='CV')
     parser.add_argument('-e', '--EPOCHS', default=2, type=int, help='train epochs')
-    parser.add_argument('-b', '--BATCH', default=2, type=int, help='batch size')
+    parser.add_argument('-b', '--BATCH', default=4, type=int, help='batch size')
     config = parser.parse_args()
 
     args.EPOCHS = config.EPOCHS
