@@ -30,6 +30,7 @@ class Util(object):
         :param image_dir:
         :return:
         """
+        start = time.clock()
         if os.path.exists(output_draws_dir) is False:
             os.makedirs(output_draws_dir)
 
@@ -45,17 +46,22 @@ class Util(object):
 
                 drawing_data = json_data['drawing']
                 for item in drawing_data:
-                    plt.plot(item[0], [0 - i + 256 for i in item[1]], marker='o', linestyle='solid')
+                    plt.plot(item[0], [0 - i + 256 for i in item[1]], linestyle='solid')
 
                 plt.axis('off')
                 save_path = os.path.join(output_draws_dir, str(str(image_dir.split('/')[-1]).split('.')[0]) + '.jpg')
                 plt.savefig(save_path, bbox_inches='tight')
                 image = Image.open(save_path).resize((args.dpi, args.dpi), Image.ANTIALIAS)
+                image.save(save_path)
                 data.append(np.asarray(image))
-            plt.show()
 
+                # 删除图片
+                os.remove(save_path)
+
+            plt.close()
         data = np.asarray(data)
 
+        print(time.clock() - start)
         return data, targets
 
     @staticmethod
@@ -140,6 +146,24 @@ class Util(object):
             raise NotImplementedError
 
 
+class LabelSmoothingLoss(nn.Module):
+    def __init__(self, classes, smoothing=0.0, dim=-1):
+        super(LabelSmoothingLoss, self).__init__()
+        self.confidence = 1.0 - smoothing
+        self.smoothing = smoothing
+        self.cls = classes
+        self.dim = dim
+
+    def forward(self, pred, target):
+        pred = pred.log_softmax(dim=self.dim)
+        with torch.no_grad():
+            # true_dist = pred.data.clone()
+            true_dist = torch.zeros_like(pred)
+            true_dist.fill_(self.smoothing / (self.cls - 1))
+            true_dist.scatter_(1, target.data.unsqueeze(1), self.confidence)
+        return torch.mean(torch.sum(-true_dist * pred, dim=self.dim))
+
+
 class AverageMeter(object):
     """
     Computes and stores the averagte and current value
@@ -175,7 +199,6 @@ class Trainer(object):
         data_time = AverageMeter()
         losses = AverageMeter()
         top1 = AverageMeter()
-        top5 = AverageMeter()
 
         # switch to train mode
         self.model.train()
@@ -186,6 +209,7 @@ class Trainer(object):
         self.logger.info('Epoch: {0}  lr: {1}'.format(epoch, lr))
 
         end = time.time()
+        print(self.dataset.get_step())
         for step in range(0, self.dataset.get_step() // self.args.EPOCHS):
             x_train, y_train = self.dataset.next_train_batch()
 
@@ -213,10 +237,9 @@ class Trainer(object):
             loss = self.criterion(outputs, targets)
 
             # measure error and record loss
-            err1, err5 = Util.error(outputs.data, targets, topk=(1, 5))
+            err1 = Util.error(outputs.data, targets, topk=(1,))
             losses.update(loss.item(), inputs.size(0))
-            top1.update(err1.item(), inputs.size(0))
-            top5.update(err5.item(), inputs.size(0))
+            top1.update(err1[0].item(), inputs.size(0))
 
             # compute gradient and do SGD step
             self.optimizer.zero_grad()
@@ -233,23 +256,20 @@ class Trainer(object):
                                  'Time {batch_time.avg:.3f}\t'
                                  'Data {data_time.avg:.3f}\t'
                                  'Loss {loss.val:.4f}\t'
-                                 'Err@1 {top1.val:.4f}\t'
-                                 'Err@5 {top5.val:.4f}'.format(epoch, step + 1, len(train_loader),
+                                 'Err {top1.val:.4f}'.format(epoch, step + 1, len(train_loader),
                                                                batch_time=batch_time,
-                                                               data_time=data_time, loss=losses, top1=top1, top5=top5))
+                                                               data_time=data_time, loss=losses, top1=top1))
 
         self.logger.info(
-            'Epoch: {:3d} Train loss {loss.avg:.4f} Err@1 {top1.avg:.4f} Err@5 {top5.avg:.4f}'.format(epoch,
-                                                                                                      loss=losses,
-                                                                                                      top1=top1,
-                                                                                                      top5=top5))
-        return losses.avg, top1.avg, top5.avg, lr
+            'Epoch: {:3d} Train loss {loss.avg:.4f} Err {top1.avg:.4f}'.format(epoch,
+                                                                                 loss=losses,
+                                                                                 top1=top1))
+        return losses.avg, top1.avg, lr
 
     def test(self, epoch, silence=False):
         batch_time = AverageMeter()
         losses = AverageMeter()
         top1 = AverageMeter()
-        top5 = AverageMeter()
 
         # switch to evaluate mode
         self.model.eval()
@@ -276,18 +296,15 @@ class Trainer(object):
                 loss = self.criterion(outputs, targets)
 
                 # measure error and record loss
-                err1, err5 = Util.error(outputs.data, targets, topk=(1, 5))
+                err1 = Util.error(outputs.data, targets, topk=(1,))
                 losses.update(loss.item(), inputs.size(0))
-                top1.update(err1.item(), inputs.size(0))
-                top5.update(err5.item(), inputs.size(0))
+                top1.update(err1[0].item(), inputs.size(0))
 
                 # measure elapsed time
                 batch_time.update(time.time() - end)
                 end = time.time()
 
         if not silence:
-            print('Epoch: {:3d} val   loss {loss.avg:.4f} Err@1 {top1.avg:.4f}'
-                  ' Err@5 {top5.avg:.4f}'.format(epoch, loss=losses,
-                                                 top1=top1, top5=top5))
+            print('Epoch: {:3d} val   loss {loss.avg:.4f} Err {top1.avg:.4f}'.format(epoch, loss=losses, top1=top1))
 
-        return losses.avg, top1.avg, top5.avg
+        return losses.avg, top1.avg

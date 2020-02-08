@@ -11,12 +11,11 @@ import random
 import numpy as np
 import torch.backends.cudnn as cudnn
 
-from torch import nn
 from time import strftime, localtime
 from flyai.dataset import Dataset
 
 import args
-from util import Util, Trainer
+from ResNet.util import Util, Trainer, LabelSmoothingLoss
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -41,14 +40,16 @@ class Instructor(object):
         best_err1 = 100.
         best_epoch = 0
 
-        self.args.tensorboard = False
         logger.info('==> creating model "{}"'.format(args.model_name))
         model = Util.getModel(**vars(args))
 
+        model = model.to(DEVICE)
         # 大部分情况下，设置这个flag可以让内置的cuDNN的auto - tuner自动寻找最适合当前配置的高效算法，来达到优化运行效率的问题。
         cudnn.benchmark = True
         # define loss function (criterion) and pptimizer
-        criterion = nn.CrossEntropyLoss().to(DEVICE)
+        # criterion = nn.CrossEntropyLoss().to(DEVICE)
+        # 标签平滑
+        criterion = LabelSmoothingLoss(classes=self.args.num_classes, smoothing=0.2)
 
         # define optimizer
         optimizer = Util.getOptimizer(model=model, args=self.args)
@@ -60,7 +61,7 @@ class Instructor(object):
             trainer.train(epoch=epoch)
 
             # evaluate on validation set
-            val_loss, val_err1, val_err5 = trainer.test(epoch=epoch)
+            val_loss, val_err1 = trainer.test(epoch=epoch)
 
             # remember best err@1 and save checkpoint
             is_best = val_err1 < best_err1
@@ -77,7 +78,7 @@ class Instructor(object):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='CV')
-    parser.add_argument('-e', '--EPOCHS', default=2, type=int, help='train epochs')
+    parser.add_argument('-e', '--EPOCHS', default=20, type=int, help='train epochs')
     parser.add_argument('-b', '--BATCH', default=4, type=int, help='batch size')
     config = parser.parse_args()
 

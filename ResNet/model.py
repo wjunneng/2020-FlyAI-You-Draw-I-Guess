@@ -14,11 +14,10 @@ class Model(Base):
     def __init__(self, data):
         self.data = data
         self.args = args
-        self.model = Util.getModel(**vars(self.args))
-        self.model.load_state_dict(torch.load(os.path.join(self.args.output_models_dir, 'checkpoint.pkl')))
+        self.model = Util.getModel(**vars(self.args)).to(DEVICE)
+        self.model.load_state_dict(torch.load(os.path.join(self.args.output_models_dir, 'model_best.pkl')))
 
     def predict(self, **data):
-        self.model.eval()
         x_data = self.data.predict_data(**data)
 
         predict_loader = torch.utils.data.DataLoader(dataset=Util.draw_image(list_dirs=x_data, targets=None),

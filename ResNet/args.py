@@ -79,7 +79,7 @@ num_workers = 0
 # 频率
 print_freq = 1
 # 分辨率
-dpi = 64
+dpi = 32
 
 # ############################################# model params
 # depth (default=56)
@@ -100,18 +100,14 @@ compression = 0.5
 # ############################################# training related
 # trainer file name without ".py" (default: train)
 trainer = 'train'
-# 'number of total epochs to run (default: 164)'
-epochs = 164
 # 'manual epoch number (useful on restarts)'
 start_epoch = 1
 # patience for early stopping (0 means no early stopping)
 patience = 0
-# mini-batch size (default: 64)
-batch_size = 64
 # choices=['sgd', 'rmsprop', 'adam'] optimizer (default=sgd)
 optimizer = 'sgd'
 # initial learning rate (default: 0.1)
-lr = 0.02
+lr = 0.05
 # decay rate of learning rate (default: 0.1)
 decay_rate = 0.1
 # momentum (default=0.9)
