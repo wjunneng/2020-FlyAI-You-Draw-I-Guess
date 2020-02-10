@@ -30,7 +30,6 @@ class Util(object):
         :param image_dir:
         :return:
         """
-        start = time.clock()
         if os.path.exists(output_draws_dir) is False:
             os.makedirs(output_draws_dir)
 
@@ -52,8 +51,9 @@ class Util(object):
                 save_path = os.path.join(output_draws_dir, str(str(image_dir.split('/')[-1]).split('.')[0]) + '.jpg')
                 plt.savefig(save_path, bbox_inches='tight')
                 image = Image.open(save_path).resize((args.dpi, args.dpi), Image.ANTIALIAS)
-                image.save(save_path)
-                data.append(np.asarray(image))
+                # image.save(save_path)
+                image_array = Util.normalize(np.asarray(image)).astype('uint8')
+                data.append(image_array)
 
                 # 删除图片
                 os.remove(save_path)
@@ -61,7 +61,6 @@ class Util(object):
             plt.close()
         data = np.asarray(data)
 
-        print(time.clock() - start)
         return data, targets
 
     @staticmethod
@@ -145,6 +144,22 @@ class Util(object):
         else:
             raise NotImplementedError
 
+    @staticmethod
+    def normalize(arr):
+        """
+        Linear normalization
+        http://en.wikipedia.org/wiki/Normalization_%28image_processing%29
+        """
+        arr = arr.astype('float')
+        # Do not touch the alpha channel
+        for i in range(3):
+            minval = arr[..., i].min()
+            maxval = arr[..., i].max()
+            if minval != maxval:
+                arr[..., i] -= minval
+                arr[..., i] *= (255.0 / (maxval - minval))
+        return arr
+
 
 class LabelSmoothingLoss(nn.Module):
     def __init__(self, classes, smoothing=0.0, dim=-1):
@@ -161,6 +176,7 @@ class LabelSmoothingLoss(nn.Module):
             true_dist = torch.zeros_like(pred)
             true_dist.fill_(self.smoothing / (self.cls - 1))
             true_dist.scatter_(1, target.data.unsqueeze(1), self.confidence)
+
         return torch.mean(torch.sum(-true_dist * pred, dim=self.dim))
 
 
@@ -186,30 +202,27 @@ class AverageMeter(object):
 
 
 class Trainer(object):
-    def __init__(self, dataset, model, criterion=None, optimizer=None, args=None, logger=None):
+    def __init__(self, dataset, criterion=None, optimizer=None, args=None, logger=None):
         self.dataset = dataset
-        self.model = model
         self.criterion = criterion
         self.optimizer = optimizer
         self.args = args
         self.logger = logger
 
-    def train(self, epoch):
+    def train(self, model, epoch):
         batch_time = AverageMeter()
         data_time = AverageMeter()
         losses = AverageMeter()
         top1 = AverageMeter()
 
         # switch to train mode
-        self.model.train()
+        model.train()
 
-        lr = Util.adjust_learning_rate(optimizer=self.optimizer, lr_init=self.args.lr,
-                                       decay_rate=self.args.decay_rate, epoch=epoch, num_epochs=self.args.EPOCHS)
+        lr = Util.adjust_learning_rate(optimizer=self.optimizer, lr_init=self.args.lr, decay_rate=self.args.decay_rate,
+                                       epoch=epoch, num_epochs=self.args.EPOCHS)
 
-        self.logger.info('Epoch: {0}  lr: {1}'.format(epoch, lr))
-
+        self.logger.info('\nEpoch: {0}  lr: {1}  get_step:{2}'.format(epoch, lr, self.dataset.get_step()))
         end = time.time()
-        print(self.dataset.get_step())
         for step in range(0, self.dataset.get_step() // self.args.EPOCHS):
             x_train, y_train = self.dataset.next_train_batch()
 
@@ -233,7 +246,7 @@ class Trainer(object):
             targets = targets.to(DEVICE).long()
 
             # compute outputs
-            outputs = self.model(inputs)
+            outputs = model(inputs)
             loss = self.criterion(outputs, targets)
 
             # measure error and record loss
@@ -257,30 +270,31 @@ class Trainer(object):
                                  'Data {data_time.avg:.3f}\t'
                                  'Loss {loss.val:.4f}\t'
                                  'Err {top1.val:.4f}'.format(epoch, step + 1, len(train_loader),
-                                                               batch_time=batch_time,
-                                                               data_time=data_time, loss=losses, top1=top1))
+                                                             batch_time=batch_time,
+                                                             data_time=data_time, loss=losses, top1=top1))
 
         self.logger.info(
-            'Epoch: {:3d} Train loss {loss.avg:.4f} Err {top1.avg:.4f}'.format(epoch,
-                                                                                 loss=losses,
-                                                                                 top1=top1))
-        return losses.avg, top1.avg, lr
+            'Epoch: {:3d} Train loss {loss.avg:.4f} Err {top1.avg:.4f}'.format(epoch, loss=losses, top1=top1))
+        return model
 
-    def test(self, epoch, silence=False):
+    def test(self, model, epoch, silence=False):
         batch_time = AverageMeter()
         losses = AverageMeter()
         top1 = AverageMeter()
 
         # switch to evaluate mode
-        self.model.eval()
+        model.eval()
 
+        self.logger.info('\nEpoch: {0}  get_step: {1}'.format(epoch, self.dataset.get_step()))
         end = time.time()
+        self.logger.info('\n')
         with torch.no_grad():
             for step in range(0, self.dataset.get_step() // self.args.EPOCHS):
                 x_val, y_val = self.dataset.next_validation_batch()
+
                 val_loader = torch.utils.data.DataLoader(dataset=Util.draw_image(list_dirs=x_val, targets=y_val),
                                                          batch_size=self.args.BATCH,
-                                                         shuffle=True,
+                                                         shuffle=False,
                                                          num_workers=self.args.num_workers,
                                                          pin_memory=True)
 
@@ -292,8 +306,10 @@ class Trainer(object):
                 targets = torch.from_numpy(targets).to(DEVICE).long()
 
                 # compute outputs
-                outputs = self.model(inputs)
+                outputs = model(inputs)
                 loss = self.criterion(outputs, targets)
+
+                self.logger.info('OUTPUT:{}, TARGETS:{}'.format(torch.argmax(outputs.data, dim=-1), targets))
 
                 # measure error and record loss
                 err1 = Util.error(outputs.data, targets, topk=(1,))
@@ -304,7 +320,14 @@ class Trainer(object):
                 batch_time.update(time.time() - end)
                 end = time.time()
 
-        if not silence:
-            print('Epoch: {:3d} val   loss {loss.avg:.4f} Err {top1.avg:.4f}'.format(epoch, loss=losses, top1=top1))
+                self.logger.info('Val Epoch: [{0}][{1}/{2}]\t'
+                                 'Time {batch_time.avg:.3f}\t'
+                                 'Loss {loss.val:.4f}\t'
+                                 'Err {top1.val:.4f}'.format(epoch, step + 1, len(val_loader),
+                                                             batch_time=batch_time, loss=losses, top1=top1))
 
-        return losses.avg, top1.avg
+        if not silence:
+            self.logger.info(
+                'Epoch: {:3d} val   loss {loss.avg:.4f} Err {top1.avg:.4f}'.format(epoch, loss=losses, top1=top1))
+
+        return model, losses.avg, top1.avg

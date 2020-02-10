@@ -15,7 +15,7 @@ from time import strftime, localtime
 from flyai.dataset import Dataset
 
 import args
-from ResNet.util import Util, Trainer, LabelSmoothingLoss
+from util import Util, Trainer, LabelSmoothingLoss
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -54,14 +54,14 @@ class Instructor(object):
         # define optimizer
         optimizer = Util.getOptimizer(model=model, args=self.args)
 
-        trainer = Trainer(dataset=self.dataset, model=model, criterion=criterion, optimizer=optimizer, args=self.args,
-                          logger=logger)
+        trainer = Trainer(dataset=self.dataset, criterion=criterion, optimizer=optimizer, args=self.args, logger=logger)
+        logger.info('train: {} test: {}'.format(self.dataset.get_train_length(), self.dataset.get_validation_length()))
         for epoch in range(0, self.args.EPOCHS):
             # train for one epoch
-            trainer.train(epoch=epoch)
+            model = trainer.train(model=model, epoch=epoch)
 
             # evaluate on validation set
-            val_loss, val_err1 = trainer.test(epoch=epoch)
+            model, val_loss, val_err1 = trainer.test(model=model, epoch=epoch)
 
             # remember best err@1 and save checkpoint
             is_best = val_err1 < best_err1
@@ -79,7 +79,7 @@ class Instructor(object):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='CV')
     parser.add_argument('-e', '--EPOCHS', default=20, type=int, help='train epochs')
-    parser.add_argument('-b', '--BATCH', default=4, type=int, help='batch size')
+    parser.add_argument('-b', '--BATCH', default=5, type=int, help='batch size')
     config = parser.parse_args()
 
     args.EPOCHS = config.EPOCHS

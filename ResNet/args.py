@@ -75,17 +75,17 @@ num_classes = len(class_mapping)
 # 随机种子
 seed = 42
 # 工作节点
-num_workers = 0
+num_workers = 8
 # 频率
-print_freq = 1
+print_freq = 10
 # 分辨率
 dpi = 32
 
 # ############################################# model params
 # depth (default=56)
-depth = 56
+depth = 8
 # dropout rate (default: 0.2)
-drop_rate = 0.0
+drop_rate = 0.2
 # ['none', 'linear', 'uniform'] death mode for stochastic depth (default: none)
 death_mode = 'none'
 # death rate rate (default: 0.5)

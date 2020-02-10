@@ -15,7 +15,7 @@ class Model(Base):
         self.data = data
         self.args = args
         self.model = Util.getModel(**vars(self.args)).to(DEVICE)
-        self.model.load_state_dict(torch.load(os.path.join(self.args.output_models_dir, 'model_best.pkl')))
+        self.model.load_state_dict(torch.load(os.path.join(self.args.output_models_dir, 'checkpoint.pkl')))
 
     def predict(self, **data):
         x_data = self.data.predict_data(**data)
@@ -42,7 +42,6 @@ class Model(Base):
         labels = []
         for data in datas:
             predicts = self.predict(json_path=data['json_path'])
-
             labels.append(predicts)
 
         return labels
