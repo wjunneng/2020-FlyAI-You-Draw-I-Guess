@@ -30,6 +30,7 @@ class Util(object):
         :param image_dir:
         :return:
         """
+        start = time.clock()
         if os.path.exists(output_draws_dir) is False:
             os.makedirs(output_draws_dir)
 
@@ -39,26 +40,24 @@ class Util(object):
             image_dirs = args.input_draws_dir
 
         for image_dir in list_dirs:
-            plt.figure()
             with open(file=os.path.join(image_dirs, image_dir), mode='r', encoding='utf-8') as file:
+                plt.figure()
                 json_data = json.load(file)
 
-                drawing_data = json_data['drawing']
-                for item in drawing_data:
+                for item in json_data['drawing']:
                     plt.plot(item[0], [0 - i + 256 for i in item[1]], linestyle='solid')
 
                 plt.axis('off')
                 save_path = os.path.join(output_draws_dir, str(str(image_dir.split('/')[-1]).split('.')[0]) + '.jpg')
                 plt.savefig(save_path, bbox_inches='tight')
                 image = Image.open(save_path).resize((args.dpi, args.dpi), Image.ANTIALIAS)
-                # image.save(save_path)
                 image_array = Util.normalize(np.asarray(image)).astype('uint8')
                 data.append(image_array)
 
                 # 删除图片
                 os.remove(save_path)
 
-            plt.close()
+                plt.close()
         data = np.asarray(data)
 
         return data, targets
@@ -309,8 +308,6 @@ class Trainer(object):
                 outputs = model(inputs)
                 loss = self.criterion(outputs, targets)
 
-                self.logger.info('OUTPUT:{}, TARGETS:{}'.format(torch.argmax(outputs.data, dim=-1), targets))
-
                 # measure error and record loss
                 err1 = Util.error(outputs.data, targets, topk=(1,))
                 losses.update(loss.item(), inputs.size(0))
@@ -320,11 +317,12 @@ class Trainer(object):
                 batch_time.update(time.time() - end)
                 end = time.time()
 
-                self.logger.info('Val Epoch: [{0}][{1}/{2}]\t'
-                                 'Time {batch_time.avg:.3f}\t'
-                                 'Loss {loss.val:.4f}\t'
-                                 'Err {top1.val:.4f}'.format(epoch, step + 1, len(val_loader),
-                                                             batch_time=batch_time, loss=losses, top1=top1))
+                if (step + 1) % self.args.print_freq == 0:
+                    self.logger.info('Val Epoch: [{0}][{1}/{2}]\t'
+                                     'Time {batch_time.avg:.3f}\t'
+                                     'Loss {loss.val:.4f}\t'
+                                     'Err {top1.val:.4f}'.format(epoch, step + 1, len(val_loader),
+                                                                 batch_time=batch_time, loss=losses, top1=top1))
 
         if not silence:
             self.logger.info(

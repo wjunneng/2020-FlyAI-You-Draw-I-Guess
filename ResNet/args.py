@@ -77,9 +77,13 @@ seed = 42
 # 工作节点
 num_workers = 8
 # 频率
-print_freq = 10
+print_freq = 100
 # 分辨率
 dpi = 32
+# 批量预测
+predict_batch = True
+# 批量大小
+BATCH = 240
 
 # ############################################# model params
 # depth (default=56)
