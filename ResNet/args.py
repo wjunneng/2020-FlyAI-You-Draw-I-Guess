@@ -6,7 +6,6 @@ os.chdir(sys.path[0])
 
 # ############################################# paths
 # current dir
-# current_dir = os.path.abspath('..')
 current_dir = os.getcwd()
 # data dir
 data_dir = os.path.join(current_dir, 'data')
@@ -83,7 +82,7 @@ dpi = 32
 # 批量预测
 predict_batch = True
 # 批量大小
-BATCH = 240
+BATCH = 80
 
 # ############################################# model params
 # depth (default=56)
