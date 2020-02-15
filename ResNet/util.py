@@ -30,7 +30,6 @@ class Util(object):
         :param image_dir:
         :return:
         """
-        start = time.clock()
         if os.path.exists(output_draws_dir) is False:
             os.makedirs(output_draws_dir)
 

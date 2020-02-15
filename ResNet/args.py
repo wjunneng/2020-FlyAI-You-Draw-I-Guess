@@ -78,7 +78,7 @@ num_workers = 8
 # 频率
 print_freq = 100
 # 分辨率
-dpi = 32
+dpi = 8
 # 批量预测
 predict_batch = True
 # 批量大小
