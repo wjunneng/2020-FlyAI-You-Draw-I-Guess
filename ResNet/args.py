@@ -25,6 +25,9 @@ output_draws_dir = os.path.join(output_dir, 'draws')
 # output model dir
 output_models_dir = os.path.join(output_dir, 'models')
 
+# min_threshold
+min_threshold_dir = os.path.join(output_dir, 'min_threshold.pkl')
+
 # ############################################# params
 # 模型名称
 model_name = 'resnet'
@@ -74,15 +77,15 @@ num_classes = len(class_mapping)
 # 随机种子
 seed = 42
 # 工作节点
-num_workers = 8
+num_workers = 0
 # 频率
 print_freq = 100
 # 分辨率
-dpi = 8
+dpi = 32
 # 批量预测
 predict_batch = True
 # 批量大小
-BATCH = 80
+BATCH = 800
 
 # ############################################# model params
 # depth (default=56)

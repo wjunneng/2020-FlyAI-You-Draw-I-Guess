@@ -16,7 +16,7 @@ from time import strftime, localtime
 from flyai.dataset import Dataset
 
 import args
-from util import Util, Trainer, LabelSmoothingLoss, Trainer_1, FocalLoss
+from util import Util, Trainer, LabelSmoothingLoss
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -24,7 +24,7 @@ logger.addHandler(logging.StreamHandler(sys.stdout))
 
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-logger.info(DEVICE)
+print(DEVICE)
 
 
 class Instructor(object):
@@ -50,22 +50,19 @@ class Instructor(object):
         # define loss function (criterion) and pptimizer
         # criterion = nn.CrossEntropyLoss().to(DEVICE)
         # 标签平滑
-        criterion = LabelSmoothingLoss(classes=self.args.num_classes, smoothing=0.1)
-        # Focal Loss
-        # criterion = FocalLoss(class_num=self.args.num_classes)
+        criterion = LabelSmoothingLoss(classes=self.args.num_classes, smoothing=0.2)
 
         # define optimizer
         optimizer = Util.getOptimizer(model=model, args=self.args)
 
-        trainer = Trainer_1(dataset=self.dataset, criterion=criterion, optimizer=optimizer, args=self.args,
-                            logger=logger)
+        trainer = Trainer(dataset=self.dataset, criterion=criterion, optimizer=optimizer, args=self.args, logger=logger)
         logger.info('train: {} test: {}'.format(self.dataset.get_train_length(), self.dataset.get_validation_length()))
         for epoch in range(0, self.args.EPOCHS):
             # train for one epoch
             model = trainer.train(model=model, epoch=epoch)
 
             # evaluate on validation set
-            model, val_err1 = trainer.test(model=model, epoch=epoch)
+            model, val_loss, val_err1 = trainer.test(model=model, epoch=epoch)
 
             # remember best err@1 and save checkpoint
             is_best = val_err1 < best_err1
@@ -83,7 +80,7 @@ class Instructor(object):
 if __name__ == '__main__':
     start = time.clock()
     parser = argparse.ArgumentParser(description='CV')
-    parser.add_argument('-e', '--EPOCHS', default=10, type=int, help='train epochs')
+    parser.add_argument('-e', '--EPOCHS', default=5, type=int, help='train epochs')
     parser.add_argument('-b', '--BATCH', default=8, type=int, help='batch size')
     config = parser.parse_args()
 
@@ -106,4 +103,4 @@ if __name__ == '__main__':
     instructor = Instructor(args=args)
     instructor.run()
 
-    logger.info('using time: {}'.format(time.clock() - start))
+    print(time.clock() - start)

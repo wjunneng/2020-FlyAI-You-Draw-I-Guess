@@ -11,14 +11,22 @@ import shutil
 import numpy as np
 import torch.utils.data
 
+from torch.utils.data import Dataset
 from torch import nn
 from PIL import Image
 from importlib import import_module
 from matplotlib import pyplot as plt
+import torch
+import pickle
+import torch.nn.functional as F
+from torch.autograd import Variable
 
 import args
 
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
+if os.path.exists(args.output_draws_dir) is False:
+    os.makedirs(args.output_draws_dir)
 
 
 class Util(object):
@@ -30,9 +38,7 @@ class Util(object):
         :param image_dir:
         :return:
         """
-        if os.path.exists(output_draws_dir) is False:
-            os.makedirs(output_draws_dir)
-
+        stroke = []
         data = []
         if list_dirs is None:
             list_dirs = os.listdir(image_dirs)
@@ -43,6 +49,7 @@ class Util(object):
                 plt.figure()
                 json_data = json.load(file)
 
+                stroke.append(len(json_data['drawing']))
                 for item in json_data['drawing']:
                     plt.plot(item[0], [0 - i + 256 for i in item[1]], linestyle='solid')
 
@@ -59,7 +66,7 @@ class Util(object):
                 plt.close()
         data = np.asarray(data)
 
-        return data, targets
+        return data, targets, stroke
 
     @staticmethod
     def adjust_learning_rate(optimizer, lr_init, decay_rate, epoch, num_epochs):
@@ -105,6 +112,11 @@ class Util(object):
                 res.append(100.0 - correct_k.mul_(100.0 / batch_size))
 
         return res
+
+    @staticmethod
+    def error_1(output, target, topk=(1,)):
+        with torch.no_grad():
+            maxk = max(topk)
 
     @staticmethod
     def save_checkpoint(state, is_best, save_dir, filename='checkpoint.pkl'):
@@ -157,6 +169,73 @@ class Util(object):
                 arr[..., i] -= minval
                 arr[..., i] *= (255.0 / (maxval - minval))
         return arr
+
+    @staticmethod
+    def update_dict(a, b):
+        """
+        更新两个dict的值，取value小的key
+        :param a:
+        :param b:
+        :return:
+        """
+        c = {**a, **b}
+        d = {**b, **a}
+
+        return dict(zip(c.keys(), [min(i, j) for i, j in zip(c.values(), d.values())]))
+
+
+class FocalLoss(nn.Module):
+    r"""
+        This criterion is a implemenation of Focal Loss, which is proposed in
+        Focal Loss for Dense Object Detection.
+            Loss(x, class) = - \alpha (1-softmax(x)[class])^gamma \log(softmax(x)[class])
+        The losses are averaged across observations for each minibatch.
+        Args:
+            alpha(1D Tensor, Variable) : the scalar factor for this criterion
+            gamma(float, double) : gamma > 0; reduces the relative loss for well-classiﬁed examples (p > .5),
+                                   putting more focus on hard, misclassiﬁed examples
+            size_average(bool): By default, the losses are averaged over observations for each minibatch.
+                                However, if the field size_average is set to False, the losses are
+                                instead summed for each minibatch.
+    """
+
+    def __init__(self, class_num, alpha=None, gamma=2, size_average=True):
+        super(FocalLoss, self).__init__()
+        if alpha is None:
+            self.alpha = Variable(torch.ones(class_num, 1))
+        else:
+            if isinstance(alpha, Variable):
+                self.alpha = alpha
+            else:
+                self.alpha = Variable(alpha)
+        self.gamma = gamma
+        self.class_num = class_num
+        self.size_average = size_average
+
+    def forward(self, inputs, targets):
+        N = inputs.size(0)
+        C = inputs.size(1)
+        P = F.softmax(inputs, dim=1)
+        class_mask = inputs.data.new(N, C).fill_(0)
+        class_mask = Variable(class_mask)
+        ids = targets.view(-1, 1)
+        class_mask.scatter_(1, ids.data, 1.)
+
+        if inputs.is_cuda and not self.alpha.is_cuda:
+            self.alpha = self.alpha.cuda()
+        alpha = self.alpha[ids.data.view(-1)]
+
+        probs = (P * class_mask).sum(1).view(-1, 1)
+
+        log_p = probs.log()
+
+        batch_loss = -alpha * (torch.pow((1 - probs), self.gamma)) * log_p
+
+        if self.size_average:
+            loss = batch_loss.mean()
+        else:
+            loss = batch_loss.sum()
+        return loss
 
 
 class LabelSmoothingLoss(nn.Module):
@@ -277,7 +356,6 @@ class Trainer(object):
 
     def test(self, model, epoch, silence=False):
         batch_time = AverageMeter()
-        losses = AverageMeter()
         top1 = AverageMeter()
 
         # switch to evaluate mode
@@ -285,7 +363,6 @@ class Trainer(object):
 
         self.logger.info('\nEpoch: {0}  get_step: {1}'.format(epoch, self.dataset.get_step()))
         end = time.time()
-        self.logger.info('\n')
         with torch.no_grad():
             for step in range(0, self.dataset.get_step() // self.args.EPOCHS):
                 x_val, y_val = self.dataset.next_validation_batch()
@@ -305,11 +382,9 @@ class Trainer(object):
 
                 # compute outputs
                 outputs = model(inputs)
-                loss = self.criterion(outputs, targets)
 
                 # measure error and record loss
                 err1 = Util.error(outputs.data, targets, topk=(1,))
-                losses.update(loss.item(), inputs.size(0))
                 top1.update(err1[0].item(), inputs.size(0))
 
                 # measure elapsed time
@@ -319,12 +394,165 @@ class Trainer(object):
                 if (step + 1) % self.args.print_freq == 0:
                     self.logger.info('Val Epoch: [{0}][{1}/{2}]\t'
                                      'Time {batch_time.avg:.3f}\t'
-                                     'Loss {loss.val:.4f}\t'
                                      'Err {top1.val:.4f}'.format(epoch, step + 1, len(val_loader),
-                                                                 batch_time=batch_time, loss=losses, top1=top1))
+                                                                 batch_time=batch_time, top1=top1))
 
         if not silence:
             self.logger.info(
-                'Epoch: {:3d} val   loss {loss.avg:.4f} Err {top1.avg:.4f}'.format(epoch, loss=losses, top1=top1))
+                'Epoch: {:3d} val Err {top1.avg:.4f}'.format(epoch, top1=top1))
 
-        return model, losses.avg, top1.avg
+        return model, top1.avg
+
+
+class ImageDataset(Dataset):
+    def __init__(self, data, targets):
+        self.data = data
+        self.targets = targets
+        self.all_data = self._deal()
+
+    def _deal(self):
+        if self.targets is None:
+            return [{'inputs': self.data[i]} for i in range(len(self.data))]
+        else:
+            return [{'inputs': self.data[i], 'targets': self.targets[i]} for i in range(len(self.data))]
+
+    def __getitem__(self, index):
+        return self.all_data[index]
+
+    def __len__(self):
+        return len(self.all_data)
+
+
+class Trainer_1(object):
+    def __init__(self, dataset, criterion=None, optimizer=None, args=None, logger=None):
+        self.dataset = dataset
+        self.criterion = criterion
+        self.optimizer = optimizer
+        self.args = args
+        self.logger = logger
+        self.min_threshold = dict(zip(self.args.class_mapping.keys(), [100] * self.args.num_classes))
+
+    def train(self, model, epoch):
+        batch_time = AverageMeter()
+        data_time = AverageMeter()
+        losses = AverageMeter()
+        top1 = AverageMeter()
+
+        # switch to train mode
+        model.train()
+
+        x_train, y_train, _, _ = self.dataset.get_all_processor_data()
+        data, targets, stroke = Util.draw_image(list_dirs=x_train, targets=y_train)
+        self.min_threshold = Util.update_dict(self.min_threshold, dict(zip(targets, stroke)))
+
+        with open(self.args.min_threshold_dir, 'wb') as file:
+            pickle.dump(obj=self.min_threshold, file=file)
+
+        train_loader = torch.utils.data.DataLoader(dataset=ImageDataset(data=data, targets=targets),
+                                                   batch_size=self.args.BATCH,
+                                                   shuffle=False,
+                                                   num_workers=self.args.num_workers,
+                                                   pin_memory=True)
+
+        lr = Util.adjust_learning_rate(optimizer=self.optimizer, lr_init=self.args.lr, decay_rate=self.args.decay_rate,
+                                       epoch=epoch, num_epochs=self.args.EPOCHS)
+
+        self.logger.info('\nEpoch: {0}  lr: {1}  get_step:{2}'.format(epoch, lr, self.dataset.get_step()))
+        end = time.time()
+        for step, data in enumerate(train_loader):
+            # inputs_shape: (4, 3, 480, 640)
+            inputs = data['inputs'].permute((0, 3, 1, 2))
+            targets = data['targets']
+
+            # measure data loading time
+            data_time.update(time.time() - end)
+
+            inputs = inputs.to(DEVICE).float()
+            targets = targets.to(DEVICE).long()
+
+            # compute outputs
+            outputs = model(inputs)
+            loss = self.criterion(outputs, targets)
+
+            # measure error and record loss
+            err1 = Util.error(outputs.data, targets, topk=(1,))
+            losses.update(loss.item(), inputs.size(0))
+            top1.update(err1[0].item(), inputs.size(0))
+
+            # compute gradient and do SGD step
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
+
+            # measure elapsed time
+            batch_time.update(time.time() - end)
+
+            end = time.time()
+
+            if self.args.print_freq > 0 and (step + 1) % self.args.print_freq == 0:
+                self.logger.info('Epoch: [{0}][{1}/{2}]\t'
+                                 'Time {batch_time.avg:.3f}\t'
+                                 'Data {data_time.avg:.3f}\t'
+                                 'Loss {loss.val:.4f}\t'
+                                 'Err {top1.val:.4f}'.format(epoch, step + 1, len(train_loader),
+                                                             batch_time=batch_time,
+                                                             data_time=data_time, loss=losses, top1=top1))
+
+        self.logger.info(
+            'Epoch: {:3d} Train loss {loss.avg:.4f} Err {top1.avg:.4f}'.format(epoch, loss=losses, top1=top1))
+        return model
+
+    def test(self, model, epoch, silence=False):
+        batch_time = AverageMeter()
+        top1 = AverageMeter()
+
+        # switch to evaluate mode
+        model.eval()
+
+        x_val, y_val = self.dataset.get_all_validation_data()
+        data, targets, stroke = Util.draw_image(list_dirs=x_val, targets=y_val)
+        with open(self.args.min_threshold_dir, 'rb') as file:
+            self.min_threshold = pickle.load(file=file)
+
+        self.min_threshold = Util.update_dict(self.min_threshold, dict(zip(targets, stroke)))
+
+        with open(self.args.min_threshold_dir, 'wb') as file:
+            pickle.dump(obj=self.min_threshold, file=file)
+
+        val_loader = torch.utils.data.DataLoader(dataset=ImageDataset(data=data, targets=targets),
+                                                 batch_size=self.args.BATCH,
+                                                 shuffle=False,
+                                                 num_workers=self.args.num_workers,
+                                                 pin_memory=True)
+
+        self.logger.info('\nEpoch: {0}  get_step: {1}'.format(epoch, self.dataset.get_step()))
+        end = time.time()
+        with torch.no_grad():
+            for step, data in enumerate(val_loader):
+                # inputs_shape: (4, 3, 480, 640)
+                inputs = data['inputs'].permute((0, 3, 1, 2))
+                inputs = inputs.to(DEVICE).float()
+                targets = data['targets'].to(DEVICE).long()
+
+                # compute outputs
+                outputs = model(inputs)
+
+                # measure error and record loss
+                err1 = Util.error(outputs.data, targets, topk=(1,))
+                top1.update(err1[0].item(), inputs.size(0))
+
+                # measure elapsed time
+                batch_time.update(time.time() - end)
+                end = time.time()
+
+                if (step + 1) % self.args.print_freq == 0:
+                    self.logger.info('Val Epoch: [{0}][{1}/{2}]\t'
+                                     'Time {batch_time.avg:.3f}\t'
+                                     'Err {top1.val:.4f}'.format(epoch, step + 1, len(val_loader),
+                                                                 batch_time=batch_time, top1=top1))
+
+        if not silence:
+            self.logger.info(
+                'Epoch: {:3d} val Err {top1.avg:.4f}'.format(epoch, top1=top1))
+
+        return model, top1.avg
